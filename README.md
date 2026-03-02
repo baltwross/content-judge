@@ -109,6 +109,15 @@ The coordinator is genuinely agentic — it dispatches all three tools in parall
 - **Local video files** (.mp4, .mov, .avi, .mkv, .webm, .wmv) — Gemini via File API upload; Hive via direct upload
 - Other video platforms (Vimeo, Dailymotion, etc.) are **not supported** — download the video and pass the local file path instead
 
+## Assumptions
+
+- **"AI-generated" means fully synthetic.** The system asks "was this made by AI?", not "did AI assist?" Human-AI collaborative content (e.g., AI draft with human edits) is a known gray zone — the system returns probability scores rather than binary labels to handle it.
+- **Virality can be assessed, not predicted.** Even the best ML systems with real engagement data explain only ~50% of variance in sharing. The system scores content features empirically correlated with sharing (Berger & Milkman 2012, STEPPS, SUCCES) and labels output "virality potential," not "virality prediction."
+- **Short text is unreliable for AI detection.** All commercial detectors lose 10-15% accuracy below 200 words. The system caps confidence for short text accordingly (e.g., under 50 words caps at LOW).
+- **Video AI detection is commercially solved.** VLMs achieve 30-60% accuracy on AI video detection; Hive achieves 96-99%. The system uses the purpose-built tool for detection and the LLM for explanation, not the reverse.
+- **English content only.** All prompts, rubrics, and analysis are English-optimized. Non-English content will produce degraded results.
+- **Single LLM provider for a time-boxed build.** One SDK, one API key, one error-handling path. Gemini was chosen specifically for native video input (YouTube URLs direct, local files via File API) and structured JSON output.
+
 ## What Would Improve With More Time
 
 - **Audio analysis** — Dedicated audio feature extraction (speech cadence, music energy, audio quality) as separate signals
