@@ -1,0 +1,118 @@
+# Content Judge Agent
+
+An AI-powered content analysis agent that evaluates text and video content across three dimensions: AI detection, virality potential, and audience distribution fit. Built as an agentic system using Gemini as the sole LLM provider with an optional Hive API integration for high-accuracy AI video detection.
+
+## How to Run
+
+### Prerequisites
+
+- Python 3.11+
+- A [Gemini API key](https://aistudio.google.com/apikey) (required)
+- A [Hive API key](https://thehive.ai/) (optional — enables 96-99% accurate AI video detection)
+
+### Setup
+
+```bash
+# Clone and install
+git clone <repo-url>
+cd content-judge
+pip install -e ".[dev]"
+
+# Configure API keys
+cp .env.example .env
+# Edit .env and add your GEMINI_API_KEY (required)
+```
+
+### Usage
+
+```bash
+# Analyze a text string
+content-judge "The discovery of a hidden Roman city beneath Naples shocked archaeologists today"
+
+# Analyze a text file
+content-judge ./article.txt
+
+# Analyze a URL
+content-judge https://example.com/article
+
+# Analyze a YouTube video
+content-judge --video "https://www.youtube.com/watch?v=..."
+
+# Analyze a local video file
+content-judge --video ./clip.mp4
+
+# Get JSON output for scripting
+content-judge --json "Some text" | python -m json.tool
+
+# Verbose analysis with all dimension scores
+content-judge --verbose "Some text"
+
+# Use a different Gemini model
+content-judge --model gemini-2.5-pro "Some text"
+```
+
+### Running Tests
+
+```bash
+pytest tests/ -v
+```
+
+## Architecture
+
+```
+                      ┌─────────────────────┐
+                      │   CLI (Typer+Rich)   │
+                      │  content-judge <in>  │
+                      └──────────┬──────────┘
+                                 │
+                      ┌──────────▼──────────┐
+                      │   Content Loader     │
+                      │  text: str/file/URL  │
+                      │  video: file or YT   │
+                      └──────────┬──────────┘
+                                 │
+                      ┌──────────▼──────────┐
+                      │  Coordinator Agent   │
+                      │  (agentic loop, ≤3)  │
+                      └──────────┬──────────┘
+                                 │
+           ┌─────────────────────┼─────────────────────┐
+           │                     │                     │
+┌──────────▼──────────┐ ┌───────▼────────┐ ┌─────────▼─────────┐
+│   AI Detection      │ │   Virality     │ │   Distribution    │
+│                     │ │   Scoring      │ │   Analysis        │
+│ • Gemini (text)     │ │ • 7-dimension  │ │ • 3-layer:        │
+│ • Hive API (video)  │ │   rubric via   │ │   topic→platform  │
+│ • C2PA (optional)   │ │   Gemini       │ │   →resonance      │
+└──────────┬──────────┘ └───────┬────────┘ └─────────┬─────────┘
+           └─────────────────────┼─────────────────────┘
+                                 │
+                      ┌──────────▼──────────┐
+                      │  Synthesis → Report  │
+                      └─────────────────────┘
+```
+
+The coordinator is genuinely agentic — it dispatches all three tools in parallel, reviews results, and can re-run tools if confidence is too low or results are contradictory (bounded to 3 iterations max).
+
+### Key Design Decisions
+
+- **Gemini as sole LLM provider.** All analysis tasks (virality, distribution, AI detection text analysis, synthesis) use Gemini with structured JSON output. This eliminates multi-SDK complexity and ensures the video analysis pipeline is unified.
+- **Hive for video AI detection.** Hive Moderation API achieves 96-99% accuracy on AI-generated video detection across 100+ generators. When configured, it's the primary video detection signal.
+- **Research-grounded virality rubric.** The 7-dimension scoring rubric is grounded in Berger & Milkman (2012) empirical findings, the STEPPS framework, and the SUCCES framework. Each dimension has explicit BARS anchors (1/3/5/7/10) to reduce score clustering.
+- **3-layer distribution framework.** Topic classification (18 categories from IAB taxonomy) → platform-audience mapping (9 platforms) → resonance reasoning. Produces actionable distribution strategy, not generic audience labels.
+- **Parallel tool execution.** All three analysis tools run concurrently via `ThreadPoolExecutor`, so total time is bounded by the slowest tool, not the sum.
+- **Graceful degradation.** If any tool fails, the report is still produced with available results and explicit error notes.
+
+### Supported Video Inputs
+
+- **YouTube URLs** — Gemini analyzes the video directly via URL; Hive detects via yt-dlp stream URL resolution
+- **Local video files** (.mp4, .mov, .avi, .mkv, .webm, .wmv) — Gemini via File API upload; Hive via direct upload
+- Other video platforms (Vimeo, Dailymotion, etc.) are **not supported** — download the video and pass the local file path instead
+
+## What Would Improve With More Time
+
+- **Audio analysis** — Dedicated audio feature extraction (speech cadence, music energy, audio quality) as separate signals
+- **Evaluation harness** — Systematic calibration against ground truth engagement data to tune dimension weights and score thresholds
+- **Web UI** — Interactive dashboard for batch analysis with visualization of score distributions
+- **Caching** — Cache Gemini File API uploads and analysis results to avoid redundant API calls
+- **Multi-language support** — Current prompts and analysis are English-optimized

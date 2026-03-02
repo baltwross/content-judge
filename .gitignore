@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Environment
+.env
+.venv/
+venv/
+
+# OS files
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# CodeGraph
+.codegraph/
+
+# Verbose research docs (concise design-decisions.md is included instead)
+docs/archived/
+docs/specs/
+docs/planning/
+docs/decisions/
+docs/research/
+docs/conversational-insights/
+
+# Generated reports
+report-*.md
