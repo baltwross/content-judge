@@ -44,7 +44,7 @@ def version_callback(value: bool) -> None:
 @app.command()
 def judge(
     input: str = typer.Argument(
-        ..., help="Text, file path, URL, or video path to analyze."
+        None, help="Text, file path, URL, or video path to analyze."
     ),
     video: bool = typer.Option(False, "--video", help="Treat input as a video (local file or YouTube URL)."),
     json_output: bool = typer.Option(False, "--json", help="Output raw JSON."),
@@ -60,6 +60,13 @@ def judge(
     """Judge content for AI origin, virality potential, and audience distribution fit."""
     if no_color:
         console.no_color = True
+
+    # Wizard mode when no input provided
+    wizard_mode = input is None
+    if wizard_mode:
+        input, video, model_choice = _run_wizard()
+        model = model_choice
+        verbose = True  # verbose by default in wizard mode
 
     # Validate config
     try:
@@ -89,18 +96,16 @@ def judge(
 
     result = _run_with_progress(content, effective_model)
 
-    # Markdown report mode
-    if report or report_path:
-        from datetime import datetime
-        from content_judge.report import render_markdown
-        md = render_markdown(result)
-        out = report_path or f"report-{datetime.now().strftime('%Y-%m-%d-%H%M%S')}.md"
-        Path(out).write_text(md, encoding="utf-8")
-        console.print(f"Report written to [bold]{out}[/bold]")
-        return
-
     # Render Rich output
     _render_report(result, verbose)
+
+    # Always save markdown report
+    from datetime import datetime
+    from content_judge.report import render_markdown
+    md = render_markdown(result)
+    out = report_path or f"report-{datetime.now().strftime('%Y-%m-%d-%H%M%S')}.md"
+    Path(out).write_text(md, encoding="utf-8")
+    console.print(f"\n[bold green]Report saved to[/bold green] {out}")
 
 
 def _load_content(raw_input: str, is_video: bool) -> ContentInput:
@@ -131,6 +136,41 @@ def _detect_is_video(raw_input: str) -> bool:
         return True
 
     return False
+
+
+def _run_wizard() -> tuple[str, bool, str]:
+    """
+    Interactive wizard flow. Returns (input_value, is_video, model).
+    """
+    from InquirerPy import inquirer
+    from content_judge.config import AVAILABLE_MODELS
+
+    console.print(
+        Panel(
+            "[bold]Content Judge[/bold] — Interactive Analysis",
+            style="blue",
+        )
+    )
+
+    raw_input = inquirer.text(
+        message="Enter content to analyze (URL, file path, or text):",
+        validate=lambda val: len(val.strip()) > 0,
+        invalid_message="Input cannot be empty.",
+    ).execute()
+
+    is_video = _detect_is_video(raw_input)
+    if is_video:
+        console.print(f"[dim]Detected as video input[/dim]")
+    else:
+        console.print(f"[dim]Detected as text input[/dim]")
+
+    model = inquirer.select(
+        message="Select model:",
+        choices=AVAILABLE_MODELS,
+        default=AVAILABLE_MODELS[0],
+    ).execute()
+
+    return raw_input.strip(), is_video, model
 
 
 def _run_with_progress(content: ContentInput, model: str) -> JudgmentReport:
