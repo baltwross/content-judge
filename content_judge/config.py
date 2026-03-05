@@ -2,6 +2,12 @@
 
 from pydantic_settings import BaseSettings
 
+AVAILABLE_MODELS = [
+    "gemini-3.1-pro-preview",
+    "gemini-2.5-pro",
+    "gemini-2.5-flash",
+]
+
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
