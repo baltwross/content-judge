@@ -118,6 +118,21 @@ def _load_content(raw_input: str, is_video: bool) -> ContentInput:
     return ContentInput(source_type=source_type, text=text)
 
 
+def _detect_is_video(raw_input: str) -> bool:
+    """Auto-detect whether input is a video source."""
+    from content_judge.loaders import is_youtube_url
+    from content_judge.loaders.video import SUPPORTED_VIDEO_FORMATS
+
+    if is_youtube_url(raw_input):
+        return True
+
+    ext = Path(raw_input).suffix.lower()
+    if ext in SUPPORTED_VIDEO_FORMATS:
+        return True
+
+    return False
+
+
 def _run_with_progress(content: ContentInput, model: str) -> JudgmentReport:
     """Run coordinator with Rich progress display."""
     from content_judge.agent import CoordinatorAgent
