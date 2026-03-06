@@ -20,7 +20,7 @@ The system uses a coordinator agent that dispatches three analysis tools in para
 
 **Why not two LLM providers:** An earlier design used both Gemini and Claude. This meant two SDKs, two API keys, two retry strategies, two structured output formats. For a 6-hour build, one provider is simpler. Gemini handles text analysis, video analysis, structured output, and synthesis equally well.
 
-**Why Hive for video AI detection:** VLMs achieve 30-60% accuracy detecting AI-generated video. Hive achieves 96-99% across 100+ generators (Sora, Runway, Pika, Kling). Using the right tool for the job — no point layering a weak LLM signal on top of a near-perfect purpose-built detector.
+**Why Hive for video AI detection:** VLMs achieve 30-60% accuracy detecting AI-generated video. Hive achieves 96-99% across 100+ generators (Sora, Runway, Pika, Kling, Flux, etc.). Using the right tool for the job -- no point layering a weak LLM signal on top of a near-perfect purpose-built detector. For YouTube, yt-dlp downloads a 30-second clip at 720p (starting at 5s to skip title cards) and uploads it to Hive.
 
 **Why Gemini specifically:** Native video input (YouTube URLs directly, local files via File API). Structured JSON output via `response_schema`. This means virality and distribution tools can analyze the actual video content — not a text description of it.
 
@@ -34,7 +34,7 @@ The system uses a coordinator agent that dispatches three analysis tools in para
 - **Video content:** Hive API is the primary signal (96-99% accuracy). Gemini provides supplementary text analysis of a video description.
 - **C2PA metadata:** Checked opportunistically when present — content provenance standards are reliable when available but rarely present.
 
-**Signal aggregation:** When Hive confidence > 0.9, trust Hive. Otherwise, weighted average across all available signals. 5-level verdict scale (ai_generated → likely_ai → uncertain → likely_human → human) rather than binary, because honest uncertainty is more useful than forced confidence.
+**Signal aggregation:** Hive analyzes video at ~1 frame per second and returns per-frame scores. The parser aggregates across ALL frames using max ai_score (per Hive's documented guidance: "if any frame scores >= 0.9, flag as AI-generated"). When Hive's aggregated confidence > 0.9, trust Hive. Otherwise, weighted average across all available signals. The parser also identifies the specific AI generator from 70+ recognized classes (e.g., flux, sora, midjourney). 5-level verdict scale (ai_generated -> likely_ai -> uncertain -> likely_human -> human) rather than binary, because honest uncertainty is more useful than forced confidence.
 
 **Confidence capping:** Short text (< 200 chars) caps at "moderate" regardless of signals — there simply isn't enough content to be confident. Single-source analysis caps at "high." Only multi-source corroboration allows "very high."
 

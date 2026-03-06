@@ -2,6 +2,19 @@
 
 An AI-powered content analysis agent that evaluates text and video content across three dimensions: AI detection, virality potential, and audience distribution fit. Built as an agentic system using Gemini as the sole LLM provider with an optional Hive API integration for high-accuracy AI video detection.
 
+## Quick Start
+
+If you're trying this from the public GitHub repo, the easiest path is the interactive wizard:
+
+1. Run `content-judge`
+2. Paste a YouTube URL, type text, or drag and drop a local file into the prompt
+3. Select one of the 3 Gemini models
+4. Press `Enter`
+5. Wait for analysis to finish
+6. Open the generated `report-*.md` file
+
+If you run the command from the repo root, the markdown report is written to the repo root.
+
 ## How to Run
 
 ### Prerequisites
@@ -13,20 +26,64 @@ An AI-powered content analysis agent that evaluates text and video content acros
 ### Setup
 
 ```bash
-# Clone and install
+# Clone the repo
 git clone <repo-url>
 cd content-judge
-pip install -e ".[dev]"
+
+# Create and activate a virtual environment
+python -m venv .venv
+source .venv/bin/activate
+
+# Install the CLI
+pip install -e .
 
 # Configure API keys
 cp .env.example .env
 # Edit .env and add your GEMINI_API_KEY (required)
 ```
 
+Optional:
+
+- Add `HIVE_API_KEY` to `.env` to enable high-accuracy AI video detection
+- Install dev dependencies with `pip install -e ".[dev]"` if you want to run tests
+
 ### Usage
 
 ```bash
-# Analyze a text string
+# Recommended: interactive wizard mode
+content-judge
+
+# In the wizard, you can:
+# - paste a YouTube URL
+# - drag and drop a local video file
+# - paste text directly
+```
+
+### Wizard Behavior
+
+- You do not need `--video` in wizard mode for YouTube URLs or common local video files; the CLI auto-detects them
+- The model picker currently offers 3 choices:
+  - `gemini-3.1-pro-preview` (default)
+  - `gemini-2.5-pro`
+  - `gemini-2.5-flash`
+- Every run writes a markdown report named `report-YYYY-MM-DD-HHMMSS.md`
+- `--report-path` lets you override where that markdown report is written
+
+Example wizard flow:
+
+```text
+$ content-judge
+Enter content to analyze (URL, file path, or text): https://www.youtube.com/watch?v=...
+Detected as video input
+Select model: gemini-3.1-pro-preview
+...
+Report saved to report-2026-03-05-184328.md
+```
+
+### Direct CLI Examples
+
+```bash
+# Analyze a text string directly
 content-judge "The discovery of a hidden Roman city beneath Naples shocked archaeologists today"
 
 # Analyze a text file
@@ -49,6 +106,12 @@ content-judge --verbose "Some text"
 
 # Use a different Gemini model
 content-judge --model gemini-2.5-pro "Some text"
+
+# Enable debug logging (shows Hive frame scores, yt-dlp details, etc.)
+content-judge --debug --video "https://www.youtube.com/watch?v=..."
+
+# Save the markdown report to a specific path
+content-judge --report-path ./reports/latest.md "Some text"
 ```
 
 ### Running Tests
@@ -97,7 +160,7 @@ The coordinator is genuinely agentic — it dispatches all three tools in parall
 ### Key Design Decisions
 
 - **Gemini as sole LLM provider.** All analysis tasks (virality, distribution, AI detection text analysis, synthesis) use Gemini with structured JSON output. This eliminates multi-SDK complexity and ensures the video analysis pipeline is unified.
-- **Hive for video AI detection.** Hive Moderation API achieves 96-99% accuracy on AI-generated video detection across 100+ generators. When configured, it's the primary video detection signal.
+- **Hive for video AI detection.** Hive Moderation API achieves 96-99% accuracy on AI-generated video detection across 100+ generators. When configured, it's the primary video detection signal. For YouTube, yt-dlp downloads a 30-second clip at 720p and uploads it to Hive. The response parser aggregates across all frames (max ai_score) and identifies the specific AI generator from 70+ recognized classes.
 - **Research-grounded virality rubric.** The 7-dimension scoring rubric is grounded in Berger & Milkman (2012) empirical findings, the STEPPS framework, and the SUCCES framework. Each dimension has explicit BARS anchors (1/3/5/7/10) to reduce score clustering.
 - **3-layer distribution framework.** Topic classification (18 categories from IAB taxonomy) → platform-audience mapping (9 platforms) → resonance reasoning. Produces actionable distribution strategy, not generic audience labels.
 - **Parallel tool execution.** All three analysis tools run concurrently via `ThreadPoolExecutor`, so total time is bounded by the slowest tool, not the sum.
@@ -105,7 +168,7 @@ The coordinator is genuinely agentic — it dispatches all three tools in parall
 
 ### Supported Video Inputs
 
-- **YouTube URLs** — Gemini analyzes the video directly via URL; Hive detects via yt-dlp stream URL resolution
+- **YouTube URLs** — Gemini analyzes the video directly via URL; Hive detects via yt-dlp 30s clip download (720p, 5-35s offset) + upload
 - **Local video files** (.mp4, .mov, .avi, .mkv, .webm, .wmv) — Gemini via File API upload; Hive via direct upload
 - Other video platforms (Vimeo, Dailymotion, etc.) are **not supported** — download the video and pass the local file path instead
 

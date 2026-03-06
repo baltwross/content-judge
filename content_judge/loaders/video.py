@@ -56,12 +56,43 @@ def resolve_youtube_stream_url(youtube_url: str) -> str | None:
     Use yt-dlp to resolve YouTube's temporary direct stream URL.
     No video is downloaded — just URL resolution (~1-2 seconds).
     Returns the direct stream URL or None on failure.
+
+    Tries 'bestvideo[ext=mp4][height<=720]' first for highest resolution
+    (video-only is fine since Hive only analyzes visual frames). Falls back
+    to 'best[ext=mp4][height<=720]' (combined) if video-only isn't available.
+    Combined MP4 formats often max at 360p, while video-only reaches 720p+.
     """
+    import logging
+
+    logger = logging.getLogger(__name__)
+
     try:
         import yt_dlp
 
-        with yt_dlp.YoutubeDL({"quiet": True, "no_warnings": True}) as ydl:
+        # Prefer video-only for higher resolution; fall back to combined
+        ydl_opts = {
+            "quiet": True,
+            "no_warnings": True,
+            "format": "bestvideo[ext=mp4][height<=720]/best[ext=mp4][height<=720]",
+        }
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(youtube_url, download=False)
-            return info.get("url")
-    except Exception:
+            url = info.get("url")
+
+            if not url:
+                # Fallback: check requested_formats for DASH streams
+                for fmt in info.get("requested_formats", []):
+                    if fmt.get("vcodec", "none") != "none":
+                        url = fmt.get("url")
+                        break
+
+            if url:
+                logger.debug("Resolved stream URL (height=%s, format=%s)",
+                             info.get("height"), info.get("format"))
+            else:
+                logger.debug("No stream URL found in info keys: %s", list(info.keys()))
+
+            return url
+    except Exception as e:
+        logging.getLogger(__name__).debug("Stream URL resolution failed: %s", e)
         return None

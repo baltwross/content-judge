@@ -51,6 +51,7 @@ def judge(
     report: bool = typer.Option(False, "--report", help="Write full markdown report to auto-named .md file."),
     report_path: str = typer.Option(None, "--report-path", help="Write markdown report to specific file path."),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show extended detail."),
+    debug: bool = typer.Option(False, "--debug", help="Enable debug logging to stderr."),
     model: str = typer.Option(None, "--model", help="Override Gemini model."),
     no_color: bool = typer.Option(False, "--no-color", help="Disable color output."),
     version: bool = typer.Option(
@@ -58,6 +59,10 @@ def judge(
     ),
 ) -> None:
     """Judge content for AI origin, virality potential, and audience distribution fit."""
+    if debug:
+        import logging
+        logging.basicConfig(level=logging.DEBUG, format="%(name)s %(levelname)s: %(message)s")
+
     if no_color:
         console.no_color = True
 
@@ -85,27 +90,23 @@ def judge(
         console.print(f"[bold red]Error:[/bold red] {e}")
         raise typer.Exit(code=1)
 
-    # Run analysis with progress
+    # Run analysis with progress unless JSON mode needs clean stdout
     if json_output:
-        # Suppress progress for JSON mode
         from content_judge.agent import CoordinatorAgent
+
         agent = CoordinatorAgent(model=effective_model)
         result = agent.run(content)
+    else:
+        result = _run_with_progress(content, effective_model)
+
+    _write_markdown_report(result, report_path, announce=not json_output)
+
+    if json_output:
         typer.echo(result.to_json())
         return
 
-    result = _run_with_progress(content, effective_model)
-
     # Render Rich output
     _render_report(result, verbose)
-
-    # Always save markdown report
-    from datetime import datetime
-    from content_judge.report import render_markdown
-    md = render_markdown(result)
-    out = report_path or f"report-{datetime.now().strftime('%Y-%m-%d-%H%M%S')}.md"
-    Path(out).write_text(md, encoding="utf-8")
-    console.print(f"\n[bold green]Report saved to[/bold green] {out}")
 
 
 def _load_content(raw_input: str, is_video: bool) -> ContentInput:
@@ -125,13 +126,20 @@ def _load_content(raw_input: str, is_video: bool) -> ContentInput:
 
 def _detect_is_video(raw_input: str) -> bool:
     """Auto-detect whether input is a video source."""
+    import logging
     from content_judge.loaders import is_youtube_url
     from content_judge.loaders.video import SUPPORTED_VIDEO_FORMATS
 
-    if is_youtube_url(raw_input):
+    logger = logging.getLogger(__name__)
+    cleaned = raw_input.strip().strip("'\"")
+    logger.debug("_detect_is_video: raw_input=%r, cleaned=%r", raw_input, cleaned)
+
+    if is_youtube_url(cleaned):
+        logger.debug("_detect_is_video: matched as YouTube URL")
         return True
 
-    ext = Path(raw_input).suffix.lower()
+    ext = Path(cleaned).suffix.lower()
+    logger.debug("_detect_is_video: suffix=%r, supported=%s", ext, ext in SUPPORTED_VIDEO_FORMATS)
     if ext in SUPPORTED_VIDEO_FORMATS:
         return True
 
@@ -170,7 +178,22 @@ def _run_wizard() -> tuple[str, bool, str]:
         default=AVAILABLE_MODELS[0],
     ).execute()
 
-    return raw_input.strip(), is_video, model
+    return raw_input.strip().strip("'\""), is_video, model
+
+
+def _write_markdown_report(report: JudgmentReport, report_path: str | None, announce: bool = True) -> str:
+    """Write the markdown report and optionally announce the output path."""
+    from datetime import datetime
+    from content_judge.report import render_markdown
+
+    md = render_markdown(report)
+    out = report_path or f"report-{datetime.now().strftime('%Y-%m-%d-%H%M%S')}.md"
+    Path(out).write_text(md, encoding="utf-8")
+
+    if announce:
+        console.print(f"\n[bold green]Report saved to[/bold green] {out}")
+
+    return out
 
 
 def _run_with_progress(content: ContentInput, model: str) -> JudgmentReport:

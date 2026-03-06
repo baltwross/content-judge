@@ -44,14 +44,14 @@ Reference: [Challenge-Build_a_Judge_Agent.md](../Challenge-Build_a_Judge_Agent.m
 
 **Decision:** Use Gemini 2.5 Flash for ALL video analysis (YouTube URLs direct, local files via File API upload). Use Hive API for AI-generated content detection on all video. Use yt-dlp to resolve YouTube stream URLs for Hive.
 
-**Rationale:** Gemini's native video input processes ~1fps visual frames, full audio, speech, on-screen text, and temporal continuity in a single API call -- far richer than static keyframes. The yt-dlp stream URL resolution allows Hive to analyze YouTube video without downloading it locally. This gives both Gemini's rich understanding AND Hive's 96-99% AI detection accuracy for every video input.
+**Rationale:** Gemini's native video input processes ~1fps visual frames, full audio, speech, on-screen text, and temporal continuity in a single API call -- far richer than static keyframes. yt-dlp bridges YouTube URLs to Hive by downloading a 30-second clip at 720p for upload. This gives both Gemini's rich understanding AND Hive's 96-99% AI detection accuracy for every video input.
 
 **Unified pipeline:**
 1. **Gemini** for all video analysis (YouTube URL direct, local file via File API upload)
-2. **Hive API** for AI video detection (YouTube via yt-dlp stream URL, local via file upload; clip-download fallback if stream URL fails)
+2. **Hive API** for AI video detection (YouTube: 30s clip download at `bestvideo[ext=mp4][height<=720]` + upload; local: direct file upload). Stream URL submission is attempted first but Hive returns 400 for YouTube stream URLs.
 3. **Gemini** for all LLM tasks: virality scoring, distribution analysis, AI detection text analysis, coordinator review, synthesis (all directly on actual content -- see Decisions VS-8, DA-1)
 
-**Dependencies:** yt-dlp (stream URL resolution only, not video download). OpenCV is not needed.
+**Dependencies:** yt-dlp (stream URL resolution + 30s clip download for Hive YouTube path). OpenCV is not needed.
 
 ---
 
@@ -268,7 +268,7 @@ See detailed decisions DA-1 through DA-10 below for taxonomy, platform enum, sig
 
 **Rationale:** For a demo/evaluation tool with one job, subcommands add syntax overhead without benefit. `content-judge "some text"` is immediately intuitive. The `--video` flag explicitly routes video content rather than auto-detecting file type, because auto-detection would require attempting to open files as video before knowing they are valid, adding complexity and confusing error messages.
 
-**Flags:** `--video`, `--json`, `--verbose` / `-v`, `--model`, `--no-color`, `--version`.
+**Flags:** `--video`, `--json`, `--verbose` / `-v`, `--debug`, `--model`, `--report`, `--report-path`, `--no-color`, `--version`.
 
 ---
 
@@ -532,7 +532,7 @@ See detailed decisions DA-1 through DA-10 below for taxonomy, platform enum, sig
 
 **Rationale:** Making Hive optional means the system works without additional API keys while allowing operators who want higher video detection accuracy to configure it. The free V3 tier (100 requests/day) is sufficient for demo use. VLMs alone achieve only 30-77% accuracy on video deepfake detection (arxiv:2506.10474), so Hive's contribution is significant when available.
 
-**Implementation:** Hive receives video via the unified pipeline (YouTube: yt-dlp stream URL; fallback: 5-10s clip download; local: file upload). The Hive result is passed to the Gemini analysis prompt for agreement/disagreement explanation.
+**Implementation:** Hive receives video via the unified pipeline (YouTube: yt-dlp stream URL attempted, but Hive returns 400; actual path: 30s clip download at 720p, 5-35s offset, uploaded via multipart; local: direct file upload). The Hive response parser aggregates across all frames (max ai_score per Hive's documented guidance) and identifies the specific generator from 70+ recognized classes. The Hive result is passed to the Gemini analysis prompt for agreement/disagreement explanation.
 
 ---
 
